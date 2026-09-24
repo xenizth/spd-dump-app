@@ -17,12 +17,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Locate sdkmanager
+        id: sdk
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | sort -V | tail -n1)
+          echo "Found: $SDKMANAGER"
+          echo "path=$SDKMANAGER" >> "$GITHUB_OUTPUT"
+
       - name: Accept SDK licenses
-        run: yes | sdkmanager --licenses || true
+        run: yes | "${{ steps.sdk.outputs.path }}" --licenses || true
 
       - name: Install platform, build-tools, NDK, CMake
         run: |
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+          "${{ steps.sdk.outputs.path }}" "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
