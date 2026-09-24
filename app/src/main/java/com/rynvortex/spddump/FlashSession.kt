@@ -7,11 +7,6 @@ import androidx.lifecycle.MutableLiveData
 
 enum class BackendMode { NONE, USB_FD, ROOT }
 
-/**
- * App-wide session shared by all four tabs (Device / Operations / Files / Console),
- * so "run this operation" from the Operations grid can reuse whatever backend
- * was set up on the Device tab, and Console sees the same log stream.
- */
 object FlashSession {
 
     val backendMode = MutableLiveData(BackendMode.NONE)
@@ -26,13 +21,16 @@ object FlashSession {
     fun init(context: Context) {
         if (appContext != null) return
         appContext = context.applicationContext
-        NativeBridge.nativeInit()
-        NativeBridge.logCallback = { line -> appendLog(line) }
+        if (NativeBridge.available) {
+            NativeBridge.nativeInit()
+            NativeBridge.logCallback = { line -> appendLog(line) }
+        } else {
+            appendLog("Native USB backend not built yet - use root mode on the Device tab for now")
+        }
     }
 
     fun appendLog(line: String) {
         val current = logLines.value.orEmpty()
-        // keep the console from growing unbounded across a long session
         val trimmed = if (current.size > 2000) current.takeLast(1500) else current
         logLines.postValue(trimmed + line)
     }
@@ -42,6 +40,10 @@ object FlashSession {
     fun attachUsbBackend(backend: UsbBackend) { usbBackend = backend }
 
     fun onUsbOpened(fd: Int, vendorId: Int, productId: Int) {
+        if (!NativeBridge.available) {
+            appendLog("Native USB backend not built yet - use root mode instead")
+            return
+        }
         val ok = NativeBridge.nativeOpenWithFd(fd, vendorId, productId)
         backendMode.postValue(if (ok) BackendMode.USB_FD else BackendMode.NONE)
     }
@@ -65,11 +67,6 @@ object FlashSession {
         }
     }
 
-    /**
-     * Runs an operation's spd_dump args on whichever backend is active.
-     * See Operation.kt / OperationCatalog.kt for the argument templates -
-     * these need to match the actual spd_dump build's command syntax.
-     */
     fun runArgs(args: List<String>) {
         if (busy.value == true) {
             appendLog("Already busy with another command")
